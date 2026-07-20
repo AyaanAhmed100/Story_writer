@@ -1,7 +1,6 @@
 {
   "name": "story-writer",
   "version": "1.0.0",
-  "description": "AI Story Generator using Groq API and Vercel Edge Functions",
   "type": "module",
   "scripts": {
     "dev": "vercel dev"
