@@ -1,5 +1,5 @@
 export const config = {
-  runtime: 'edge', // Using Edge runtime for ultra-low latency streaming
+  runtime: 'edge', 
 };
 
 export default async function handler(req) {
@@ -18,7 +18,6 @@ export default async function handler(req) {
       });
     }
 
-    // Notice we use fetch directly without importing it
     const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
       method: 'POST',
       headers: {
@@ -26,16 +25,15 @@ export default async function handler(req) {
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        model: 'llama3-8b-8192', // Or your preferred Groq model
+        model: 'llama3-8b-8192', 
         messages: [
           { role: 'system', content: 'You are a master novelist and creative story writer. Craft deeply engaging, vivid stories.' },
           { role: 'user', content: prompt }
         ],
-        stream: true, // Enables real-time text streaming
+        stream: true, 
       }),
     });
 
-    // Pipe the Groq stream directly back to the frontend
     return new Response(response.body, {
       headers: {
         'Content-Type': 'text/event-stream',
