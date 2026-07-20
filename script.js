@@ -6,7 +6,6 @@ const placeholder = document.getElementById('placeholder');
 let isGenerating = false;
 let abortController = null;
 
-// Auto-grow textarea functionality
 promptInput.addEventListener('input', () => {
   promptInput.style.height = 'auto';
   promptInput.style.height = `${promptInput.scrollHeight}px`;
@@ -37,14 +36,13 @@ function startGeneration(prompt) {
   isGenerating = true;
   abortController = new AbortController();
   
-  // UI State Transition
   actionButton.className = 'stop-state';
   promptInput.value = '';
   promptInput.style.height = 'auto';
   promptInput.disabled = true;
   
   if (placeholder) placeholder.remove();
-  storyDisplay.textContent = ''; // Clear prior generation
+  storyDisplay.textContent = ''; 
 
   executeStreamFetch(prompt);
 }
@@ -86,10 +84,8 @@ async function executeStreamFetch(prompt) {
       if (done) break;
 
       buffer += decoder.decode(value, { stream: true });
-      
-      // Process lines emitted by Groq SSE chunk format
       const lines = buffer.split('\n');
-      buffer = lines.pop(); // Retain incomplete line context
+      buffer = lines.pop(); 
 
       for (const line of lines) {
         const cleanedLine = line.trim();
@@ -100,12 +96,8 @@ async function executeStreamFetch(prompt) {
             const parsed = JSON.parse(cleanedLine.replace(/^data: /, ''));
             const textChunk = parsed.choices[0]?.delta?.content || '';
             storyDisplay.textContent += textChunk;
-            
-            // Lock window scroll position to tracking baseline
             storyDisplay.scrollTop = storyDisplay.scrollHeight;
-          } catch (e) {
-            // Silence fragment parsing anomalies safely
-          }
+          } catch (e) {}
         }
       }
     }
