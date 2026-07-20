@@ -8,27 +8,17 @@ document.addEventListener('DOMContentLoaded', () => {
     const sendIcon = document.getElementById('send-icon');
     const stopIcon = document.getElementById('stop-icon');
     const storyContainer = document.getElementById('story-container');
-    const apiKeyInput = document.getElementById('api-key-input');
     const welcomeScreen = document.getElementById('welcome-screen');
     
     let isGenerating = false;
     
-    // Initialize API (Lightweight client-side setup)
-    const storedKey = localStorage.getItem('groq_api_key') || "";
-    if (storedKey) apiKeyInput.value = storedKey;
-    const api = new GroqAPI(storedKey);
+    // Initialize API
+    const api = new GroqAPI();
 
-    // Auto-resize prompt box up to a maximum height
+    // Auto-resize prompt box
     promptInput.addEventListener('input', () => {
         promptInput.style.height = 'auto';
         promptInput.style.height = Math.min(promptInput.scrollHeight, 200) + 'px';
-    });
-
-    // Save API key on change
-    apiKeyInput.addEventListener('change', (e) => {
-        const key = e.target.value.trim();
-        localStorage.setItem('groq_api_key', key);
-        api.setApiKey(key);
     });
 
     // Handle Enter to submit (Shift+Enter for new line)
@@ -65,10 +55,6 @@ document.addEventListener('DOMContentLoaded', () => {
 
         const prompt = promptInput.value.trim();
         if (!prompt) return;
-        if (!api.apiKey) {
-            alert("Please enter your Groq API Key in the top navigation.");
-            return;
-        }
 
         // Setup UI for new generation
         if (welcomeScreen) welcomeScreen.style.display = 'none';
@@ -76,26 +62,25 @@ document.addEventListener('DOMContentLoaded', () => {
         promptInput.style.height = 'auto';
         toggleState(true);
         
-        // Append user prompt
+        // Add User Message
         appendMessage('user', prompt);
         
-        // Create AI response container
+        // Add AI Container
         const responseElement = appendMessage('assistant', '<span class="animate-pulse text-zinc-500">Formulating narrative...</span>');
         let currentText = "";
         
-        // Master system prompt for storytelling
         const systemPrompt = "You are a master AI story writer. Create immersive, structurally sound narratives with compelling character arcs and rich sensory details. Break your text into clean, readable paragraphs.";
 
         try {
             const stream = api.streamStory(prompt, systemPrompt);
-            responseElement.innerHTML = ""; // Clear the loader text
+            responseElement.innerHTML = ""; 
             
             for await (const chunk of stream) {
                 currentText += chunk;
-                // Live rendering with basic double-newline to paragraph formatting
+                // Double breaks format directly into HTML paragraphs
                 responseElement.innerHTML = currentText.split('\n\n').map(p => `<p class="mb-4 last:mb-0">${p.replace(/\n/g, '<br>')}</p>`).join('');
                 
-                // Auto-scroll to the bottom of the document as it writes
+                // Keep scroll at bottom
                 window.scrollTo({ top: document.body.scrollHeight, behavior: 'auto' });
             }
         } catch (error) {
