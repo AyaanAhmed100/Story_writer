@@ -1,13 +1,10 @@
 // api.js
 export class GroqAPI {
-    constructor(apiKey) {
-        this.apiKey = apiKey;
+    constructor() {
+        // IMPORTANT: Replace this string with your actual Groq API key
+        this.apiKey = "gsk_YOUR_ACTUAL_API_KEY_HERE"; 
         this.baseURL = "https://api.groq.com/openai/v1/chat/completions";
         this.abortController = null;
-    }
-
-    setApiKey(key) {
-        this.apiKey = key;
     }
 
     abort() {
@@ -21,7 +18,7 @@ export class GroqAPI {
         this.abortController = new AbortController();
         
         const payload = {
-            model: "qwen/qwen3.6-27b",
+            model: "llama3-70b-8192", // Excellent Groq model for story writing
             messages: [
                 { role: "system", content: systemPrompt },
                 { role: "user", content: prompt }
@@ -50,7 +47,6 @@ export class GroqAPI {
         const decoder = new TextDecoder("utf-8");
         let buffer = "";
 
-        // Standard Server-Sent Events (SSE) parsing loop
         while (true) {
             const { done, value } = await reader.read();
             if (done) break;
@@ -58,7 +54,6 @@ export class GroqAPI {
             buffer += decoder.decode(value, { stream: true });
             const lines = buffer.split('\n');
             
-            // Keep the last incomplete line in the buffer
             buffer = lines.pop() || '';
 
             for (const line of lines) {
