@@ -1,5 +1,3 @@
-import fetch from 'node-fetch';
-
 export const config = {
   runtime: 'edge', // Using Edge runtime for ultra-low latency streaming
 };
@@ -20,6 +18,7 @@ export default async function handler(req) {
       });
     }
 
+    // Notice we use fetch directly without importing it
     const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
       method: 'POST',
       headers: {
