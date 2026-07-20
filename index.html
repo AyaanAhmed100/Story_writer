@@ -1,0 +1,305 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI Story Writer</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+        body { font-family: 'Inter', sans-serif; }
+        
+        /* Custom scrollbar for a seamless dark UI */
+        ::-webkit-scrollbar { width: 6px; }
+        ::-webkit-scrollbar-track { background: transparent; }
+        ::-webkit-scrollbar-thumb { background-color: #3f3f46; border-radius: 10px; }
+        
+        /* Utility for markdown-like spacing */
+        .story-content p { margin-bottom: 1em; }
+        .story-content p:last-child { margin-bottom: 0; }
+    </style>
+</head>
+<body class="bg-zinc-950 text-zinc-100 h-screen flex flex-col overflow-hidden selection:bg-zinc-700">
+
+    <!-- Top Navigation -->
+    <header class="flex justify-between items-center p-4 lg:px-8 border-b border-zinc-800 bg-zinc-950/80 backdrop-blur-md z-10">
+        <div class="flex items-center gap-3">
+            <i data-lucide="feather" class="text-indigo-400 w-5 h-5"></i>
+            <h1 class="text-lg font-semibold tracking-tight text-zinc-100">StoryWeaver AI</h1>
+        </div>
+        <button id="settingsBtn" class="p-2 rounded-lg hover:bg-zinc-800 transition-colors text-zinc-400 hover:text-zinc-100" title="API Key Settings">
+            <i data-lucide="settings" class="w-5 h-5"></i>
+        </button>
+    </header>
+
+    <!-- Main Chat & Story Container -->
+    <main id="storyContainer" class="flex-1 overflow-y-auto p-4 lg:px-8 pb-40 flex flex-col gap-6 scroll-smooth">
+        
+        <!-- Empty State -->
+        <div class="max-w-3xl mx-auto w-full pt-16 text-center transition-opacity duration-300" id="welcomeMessage">
+            <div class="bg-zinc-900/50 border border-zinc-800 rounded-2xl p-8 shadow-sm">
+                <i data-lucide="book-open" class="w-10 h-10 mx-auto text-zinc-600 mb-4"></i>
+                <h2 class="text-xl font-medium text-zinc-200 mb-2">Initialize the Narrative</h2>
+                <p class="text-sm text-zinc-500">Provide a prompt, character concept, or plot hook below.<br>The Groq LLM will stream the story in real-time.</p>
+            </div>
+        </div>
+
+        <!-- Chat History -->
+        <div id="chatHistory" class="max-w-3xl mx-auto w-full flex flex-col gap-6"></div>
+    </main>
+
+    <!-- Input Area -->
+    <div class="absolute bottom-0 left-0 right-0 p-4 bg-gradient-to-t from-zinc-950 via-zinc-950 to-transparent">
+        <div class="max-w-3xl mx-auto relative group flex items-end gap-2 bg-zinc-900 border border-zinc-700 focus-within:border-indigo-500/50 rounded-2xl p-2 shadow-2xl transition-colors">
+            
+            <textarea 
+                id="promptInput" 
+                rows="1"
+                class="w-full bg-transparent text-zinc-100 py-3 pl-4 pr-2 focus:outline-none resize-none max-h-40 text-sm leading-relaxed"
+                placeholder="Write a story about a cybernetic detective in neo-Tokyo..."
+            ></textarea>
+            
+            <button id="actionBtn" class="flex-shrink-0 p-3 rounded-xl bg-zinc-800 hover:bg-indigo-600 text-zinc-300 hover:text-white transition-all duration-200 flex items-center justify-center h-12 w-12">
+                <i data-lucide="send" class="w-5 h-5" id="sendIcon"></i>
+                <i data-lucide="square" class="w-5 h-5 hidden" id="stopIcon" fill="currentColor"></i>
+            </button>
+        </div>
+        <p class="text-center text-xs text-zinc-600 mt-3">Powered by Groq API & Llama 3 • Press Shift + Enter for a new line</p>
+    </div>
+
+    <!-- API Key Configuration Modal -->
+    <div id="apiModal" class="fixed inset-0 bg-black/80 backdrop-blur-sm hidden items-center justify-center z-50 transition-opacity">
+        <div class="bg-zinc-900 border border-zinc-800 p-6 rounded-2xl w-full max-w-md shadow-2xl m-4">
+            <h3 class="text-lg font-semibold mb-2 text-zinc-100 flex items-center gap-2">
+                <i data-lucide="key" class="w-5 h-5 text-indigo-400"></i> Configure Groq
+            </h3>
+            <p class="text-sm text-zinc-400 mb-6 leading-relaxed">
+                Since this is a client-side architecture, your API key is stored securely in your browser's local storage and passed directly to Groq.
+            </p>
+            <input 
+                type="password" 
+                id="apiKeyInput" 
+                placeholder="gsk_..." 
+                class="w-full bg-zinc-950 border border-zinc-800 text-zinc-100 rounded-xl p-3 focus:outline-none focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500 mb-6 text-sm font-mono placeholder:font-sans"
+            >
+            <div class="flex justify-end gap-3">
+                <button id="closeModalBtn" class="px-4 py-2 text-sm rounded-lg text-zinc-400 hover:text-zinc-100 hover:bg-zinc-800 transition">Close</button>
+                <button id="saveKeyBtn" class="px-4 py-2 text-sm rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white shadow-lg shadow-indigo-500/20 transition">Save Configuration</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Initialize Icons
+        lucide.createIcons();
+
+        // Application State
+        let apiKey = localStorage.getItem('groq_api_key') || '';
+        let isGenerating = false;
+        let abortController = null;
+        let messages = [
+            { role: "system", content: "You are an expert, highly creative AI story writer. Write beautifully crafted, engaging, and immersive narratives with rich sensory details. Format outputs logically using paragraphs." }
+        ];
+
+        // DOM Elements
+        const DOM = {
+            promptInput: document.getElementById('promptInput'),
+            actionBtn: document.getElementById('actionBtn'),
+            sendIcon: document.getElementById('sendIcon'),
+            stopIcon: document.getElementById('stopIcon'),
+            chatHistory: document.getElementById('chatHistory'),
+            welcomeMessage: document.getElementById('welcomeMessage'),
+            storyContainer: document.getElementById('storyContainer'),
+            apiModal: document.getElementById('apiModal'),
+            settingsBtn: document.getElementById('settingsBtn'),
+            closeModalBtn: document.getElementById('closeModalBtn'),
+            saveKeyBtn: document.getElementById('saveKeyBtn'),
+            apiKeyInput: document.getElementById('apiKeyInput')
+        };
+
+        // Modal Logic
+        const toggleModal = (show) => {
+            DOM.apiModal.classList[show ? 'remove' : 'add']('hidden');
+            DOM.apiModal.classList[show ? 'add' : 'remove']('flex');
+        };
+
+        if (!apiKey) toggleModal(true);
+
+        DOM.settingsBtn.addEventListener('click', () => {
+            DOM.apiKeyInput.value = apiKey;
+            toggleModal(true);
+        });
+        
+        DOM.closeModalBtn.addEventListener('click', () => toggleModal(false));
+        
+        DOM.saveKeyBtn.addEventListener('click', () => {
+            apiKey = DOM.apiKeyInput.value.trim();
+            if (apiKey) localStorage.setItem('groq_api_key', apiKey);
+            toggleModal(false);
+        });
+
+        // Input Auto-Resize
+        DOM.promptInput.addEventListener('input', function() {
+            this.style.height = 'auto';
+            this.style.height = Math.min(this.scrollHeight, 160) + 'px';
+            if(this.value.trim() === '') this.style.height = 'auto';
+        });
+
+        // Keyboard Handling
+        DOM.promptInput.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter' && !e.shiftKey) {
+                e.preventDefault();
+                handleAction();
+            }
+        });
+
+        DOM.actionBtn.addEventListener('click', handleAction);
+
+        // Toggle Send/Stop Button UI
+        function toggleButtonState(generating) {
+            isGenerating = generating;
+            if (generating) {
+                DOM.actionBtn.classList.replace('bg-zinc-800', 'bg-red-500/10');
+                DOM.actionBtn.classList.replace('hover:bg-indigo-600', 'hover:bg-red-500/20');
+                DOM.actionBtn.classList.replace('text-zinc-300', 'text-red-500');
+                DOM.sendIcon.classList.add('hidden');
+                DOM.stopIcon.classList.remove('hidden');
+            } else {
+                DOM.actionBtn.classList.replace('bg-red-500/10', 'bg-zinc-800');
+                DOM.actionBtn.classList.replace('hover:bg-red-500/20', 'hover:bg-indigo-600');
+                DOM.actionBtn.classList.replace('text-red-500', 'text-zinc-300');
+                DOM.sendIcon.classList.remove('hidden');
+                DOM.stopIcon.classList.add('hidden');
+            }
+        }
+
+        // Chat Bubble Generator
+        function createMessageElement(role, content) {
+            const wrapper = document.createElement('div');
+            wrapper.className = `flex flex-col gap-2 ${role === 'user' ? 'items-end' : 'items-start'} animate-in fade-in slide-in-from-bottom-2 duration-300`;
+            
+            const bubble = document.createElement('div');
+            bubble.className = `p-4 max-w-[90%] text-sm leading-relaxed story-content ${
+                role === 'user' 
+                ? 'bg-zinc-800 text-zinc-100 rounded-2xl rounded-br-sm' 
+                : 'text-zinc-300 rounded-2xl rounded-bl-sm'
+            }`;
+            
+            // Basic text to HTML paragraphs formatter
+            const formatText = (text) => text.split('\n\n').map(p => `<p>${p.replace(/\n/g, '<br>')}</p>`).join('');
+            bubble.innerHTML = formatText(content);
+            
+            wrapper.appendChild(bubble);
+            DOM.chatHistory.appendChild(wrapper);
+            return bubble;
+        }
+
+        // Main Generation Logic
+        async function handleAction() {
+            if (isGenerating) {
+                if (abortController) abortController.abort();
+                toggleButtonState(false);
+                return;
+            }
+
+            const prompt = DOM.promptInput.value.trim();
+            if (!prompt) return;
+            
+            if (!apiKey) {
+                toggleModal(true);
+                return;
+            }
+
+            // Cleanup UI for generation
+            DOM.welcomeMessage.style.display = 'none';
+            DOM.promptInput.value = '';
+            DOM.promptInput.style.height = 'auto';
+            createMessageElement('user', prompt);
+            
+            messages.push({ role: "user", content: prompt });
+            toggleButtonState(true);
+
+            const responseBubble = createMessageElement('assistant', '<span class="animate-pulse text-zinc-500 font-mono text-xs">Weaving narrative...</span>');
+            DOM.storyContainer.scrollTop = DOM.storyContainer.scrollHeight;
+
+            abortController = new AbortController();
+
+            try {
+                // OpenAI-compatible Chat Completions endpoint for Groq
+                const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${apiKey}`
+                    },
+                    body: JSON.stringify({
+                        model: "llama3-70b-8192", // Excellent capability for creative writing
+                        messages: messages,
+                        temperature: 0.8,
+                        stream: true
+                    }),
+                    signal: abortController.signal
+                });
+
+                if (!response.ok) {
+                    const err = await response.json();
+                    throw new Error(err.error?.message || `HTTP Error ${response.status}`);
+                }
+
+                const reader = response.body.getReader();
+                const decoder = new TextDecoder("utf-8");
+                let fullResponse = "";
+                responseBubble.innerHTML = "";
+
+                // Stream processing loop
+                while (true) {
+                    const { done, value } = await reader.read();
+                    if (done) break;
+                    
+                    const chunk = decoder.decode(value, { stream: true });
+                    const lines = chunk.split('\n');
+                    
+                    for (const line of lines) {
+                        if (line.trim().startsWith('data: ') && line.trim() !== 'data: [DONE]') {
+                            try {
+                                const data = JSON.parse(line.slice(6));
+                                const text = data.choices[0]?.delta?.content || "";
+                                fullResponse += text;
+                                
+                                // Format text dynamically during stream
+                                const formattedText = fullResponse
+                                    .split('\n\n')
+                                    .map(p => `<p>${p.replace(/\n/g, '<br>')}</p>`)
+                                    .join('');
+                                
+                                responseBubble.innerHTML = formattedText;
+                                
+                                // Autoscroll to keep up with stream
+                                DOM.storyContainer.scrollTop = DOM.storyContainer.scrollHeight;
+                            } catch (e) {
+                                console.error("Stream parse error:", e, "Line:", line);
+                            }
+                        }
+                    }
+                }
+                
+                messages.push({ role: "assistant", content: fullResponse });
+
+            } catch (error) {
+                if (error.name === 'AbortError') {
+                    const abortMsg = document.createElement('span');
+                    abortMsg.className = 'block mt-4 text-xs font-mono text-zinc-500 border-t border-zinc-800 pt-2';
+                    abortMsg.innerText = '[ Generation halted by user ]';
+                    responseBubble.appendChild(abortMsg);
+                } else {
+                    responseBubble.innerHTML = `<div class="bg-red-500/10 border border-red-500/20 text-red-400 p-3 rounded-lg text-sm">Error: ${error.message}</div>`;
+                }
+            } finally {
+                toggleButtonState(false);
+                abortController = null;
+            }
+        }
+    </script>
+</body>
+</html>
